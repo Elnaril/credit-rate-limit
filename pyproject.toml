@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "credit-rate-limit"
+dynamic = ["version"]
+authors = [
+  { name="Elnaril", email="elnaril_dev@caramail.com" },
+]
+description = "Easily rate limit async requests to API using credits, computation unit per second (CUPS) or request units, in addition to those just counting the number of request per time unit"
+keywords = ["rate limit", "rate limiter", "rate-limit", "rate-limiter", "ratelimit", "ratelimiter", "throttler", "API", "decorator", "asynchronous", "async"]
+readme = "README.md"
+license = {text = "MIT License"}
+requires-python = ">= 3.9"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/Elnaril/credit-rate-limit"
+"Bug Tracker" = "https://github.com/Elnaril/credit-rate-limit/issues"
+"Fiverr" = "https://www.fiverr.com/freelancers/elnaril"
+"Buy Me A Coffee" = "https://www.buymeacoffee.com/elnaril"
+"Malt" = "https://www.malt.com/profile/elnaril"
+
+[tool.setuptools]
+packages = ["credit_rate_limit"]

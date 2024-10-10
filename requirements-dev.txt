@@ -1,0 +1,10 @@
+-r requirements.txt
+flake8
+isort
+mypy
+pytest
+pytest-asyncio
+tox
+
+build
+twine
