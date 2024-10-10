@@ -1,0 +1,54 @@
+name: Tests & Lint
+
+on:
+  push:
+    paths-ignore:
+      - '.github/**'
+      - 'integration_tests/**'
+      - 'tutorials/**'
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'coverage.json'
+      - 'media'
+  pull_request:
+    paths-ignore:
+      - '.github/**'
+      - 'integration_tests/**'
+      - 'tutorials/**'
+      - 'README.md'
+      - 'LICENSE'
+      - '.gitignore'
+      - 'coverage.json'
+      - 'media'
+
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["all"]
+
+    environment:
+      name: Tests
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up supported Python versions
+      uses: actions/setup-python@v5
+      with:
+        python-version: |
+          3.9
+          3.10
+          3.11
+    - name: Install tox and any other packages
+      run: |
+        pip install -U pip
+        pip install tox
+    - name: Run tox
+      run: |
+        python --version
+        tox
