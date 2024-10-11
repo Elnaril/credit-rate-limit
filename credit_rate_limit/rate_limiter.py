@@ -1,3 +1,11 @@
+"""
+Easily rate limit async requests to API using credits, computation unit per second (CUPS) or request units,
+in addition to those just counting the number of requests per time unit
+
+* Author: Elnaril (https://www.fiverr.com/elnaril, https://github.com/Elnaril).
+* License: MIT.
+* Doc: https://github.com/Elnaril/credit-rate-limit
+"""
 from abc import (
     ABC,
     abstractmethod,

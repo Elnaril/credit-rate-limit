@@ -1,6 +1,6 @@
 # Credit Rate Limiter
 
-> Easily rate limit async requests to API using credits, computation unit per second (CUPS) or request units, in addition to those just counting the number of request per time unit
+> Easily rate limit async requests to API using credits, computation unit per second (CUPS) or request units, in addition to those just counting the number of requests per time unit
  
 ## Overview
 
