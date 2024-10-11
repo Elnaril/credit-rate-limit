@@ -6,4 +6,3 @@ from credit_rate_limit.rate_limiter import (
 
 
 __all__ = ["CountRateLimiter", "CreditRateLimiter", "throughput"]
-__version__ = "0.0.1"
