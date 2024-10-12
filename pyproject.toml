@@ -12,7 +12,7 @@ description = "Easily rate limit async requests to API using credits, computatio
 keywords = ["rate limit", "rate limiter", "rate-limit", "rate-limiter", "ratelimit", "ratelimiter", "throttler", "API", "decorator", "asynchronous", "async"]
 readme = "README.md"
 license = {text = "MIT License"}
-requires-python = ">= 3.9"
+requires-python = ">= 3.8"
 classifiers = [
     "Development Status :: 2 - Pre-Alpha",
     "Intended Audience :: Developers",
@@ -23,6 +23,8 @@ classifiers = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Operating System :: OS Independent",
 ]
 
