@@ -66,7 +66,7 @@ class CreditRateLimiter(AbstractRateLimiter):
 
     async def __aenter__(self) -> "CreditRateLimiter":
         while True:
-            now = time.time()
+            now = time.perf_counter()
             while self.timestamped_credits:
                 if now - self.timestamped_credits[0][0] > self.interval:
                     current_credits = self.credit_sum()
@@ -85,7 +85,7 @@ class CreditRateLimiter(AbstractRateLimiter):
             await asyncio.sleep(self.retry)
 
         current_credits = self.credit_sum()
-        self.timestamped_credits.append((time.time(), self.request_credits))
+        self.timestamped_credits.append((time.perf_counter(), self.request_credits))
         if current_credits < self.max_credits <= self.credit_sum():
             logging.debug(
                 f"Credit Rate Limiter {self.name} has reached its limit of"
@@ -113,7 +113,7 @@ class CountRateLimiter(AbstractRateLimiter):
 
     async def __aenter__(self) -> "CountRateLimiter":
         while True:
-            now = time.time()
+            now = time.perf_counter()
             while self.timestamps:
                 if now - self.timestamps[0] > self.interval:
                     self.timestamps.pop(0)
@@ -130,12 +130,13 @@ class CountRateLimiter(AbstractRateLimiter):
 
             await asyncio.sleep(self.retry)
 
-        self.timestamps.append(time.time())
-        if len(self.timestamps) == self.max_count:
+        if len(self.timestamps) == self.max_count - 1:
             logging.debug(
                 f"Rate Limiter {self.name} has reached its limit of "
                 f"{self.max_count} requests per {self.interval} s"
             )
+        self.timestamps.append(time.perf_counter())
+
         return self
 
     async def __aexit__(self, exception_type: Any, exception_val: Any, exception_traceback: Any) -> None:
