@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "credit-rate-limit"
-version = "0.1.0"
+version = "0.2.0.dev0"
 authors = [
   { name="Elnaril", email="elnaril_dev@caramail.com" },
 ]
