@@ -12,17 +12,18 @@ from credit_rate_limit import (
 
 
 @pytest.mark.parametrize(
-    "rate_limiter, calls, expected_logs, unexpected_logs, expected_duration",
+    "name, adjustment, calls, expected_logs, unexpected_logs, expected_duration",
     (
-            (CountRateLimiter(5, 1, name="RL 1"), 4, [], ["Rate Limiter RL 1 has reached its limit of 5 requests per 1 s", "Rate Limiter RL 1 has reached its limit of 5 requests per 1 s"], 1),  # noqa
-            (CountRateLimiter(5, 1, name="RL 2"), 5, ["Rate Limiter RL 2 has reached its limit of 5 requests per 1 s", ], ["Rate Limiter RL 2 is back under its limit of 200 credits per 1 s"], 1),  # noqa
-            (CountRateLimiter(5, 1, name="RL 3"), 6, ["Rate Limiter RL 3 has reached its limit of 5 requests per 1 s", "Rate Limiter RL 3 has reached its limit of 5 requests per 1 s"], [], 2),  # noqa
+        ("RL 1", 0, 4, [], ["Rate Limiter RL 1 has reached its limit of 5 calls per 1 s", "Rate Limiter RL 1 has reached its limit of 5 calls per 1 s"], 1),  # noqa
+        ("RL 2", 0, 5, ["Rate Limiter RL 2 has reached its limit of 5 calls per 1 s", ], ["Rate Limiter RL 2 is back under its limit of 200 credits per 1 s"], 1),  # noqa
+        ("RL 3", 0.9, 6, ["Rate Limiter RL 3 has reached its limit of 5 calls per 1 s", "Rate Limiter RL 3 has reached its limit of 5 calls per 1 s"], [], 2),  # noqa
     )
 )
-async def test_rate_limiter(rate_limiter, calls, expected_logs, unexpected_logs, expected_duration, caplog):
+async def test_rate_limiter(name, adjustment, calls, expected_logs, unexpected_logs, expected_duration, caplog):
+    rate_limiter = CountRateLimiter(5, 1, name=name, adjustment=adjustment)
     caplog.set_level(logging.DEBUG)
 
-    # @rate_limit(rate_limiter=rate_limiter)
+    # @count_rate_limit(rate_limiter=rate_limiter)
     @throughput(rate_limiter=rate_limiter)
     async def simulate_api_call():
         await asyncio.sleep(1)
@@ -90,7 +91,7 @@ async def test_attribute_credit_rate_limiter():
 async def test_attribute_rate_limiter():
     class MyClass:
         def __init__(self):
-            self.my_rate_limiter = CountRateLimiter(5, 1, name="RL as attribute")
+            self.my_rate_limiter = CountRateLimiter(5, 1, name="RL as attribute", adjustment=0.9)
 
         # @rate_limit_with_attribute("my_rate_limiter")
         @throughput(attribute_name="my_rate_limiter")

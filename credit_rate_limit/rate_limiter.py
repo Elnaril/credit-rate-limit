@@ -29,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 
 class AbstractRateLimiter(ABC):
-    def __init__(self, retry: float = 0.1, name: Optional[str] = None) -> None:
-        self.retry = retry
+    def __init__(self, adjustment: float = 0.1, name: Optional[str] = None) -> None:
+        self.adjustment = adjustment
         self.name = uuid4() if name is None else name
 
     @abstractmethod
@@ -43,7 +43,7 @@ class AbstractRateLimiter(ABC):
 
 
 class CreditRateLimiter(AbstractRateLimiter):
-    def __init__(self, max_credits: int, interval: float, retry: float = 0.1, name: Optional[str] = None) -> None:
+    def __init__(self, max_credits: int, interval: float, adjustment: float = 0.1, name: Optional[str] = None) -> None:
         """
         Configure a rate limit of max_credit per interval seconds (for API using credits, CUPS, request units, ...)
         :param max_credits: number of allowed credits per interval
@@ -51,7 +51,7 @@ class CreditRateLimiter(AbstractRateLimiter):
         :param retry: check rate limit every "retry" seconds once max_credits is reached
         :param name: an optional name to easily identify the instance
         """
-        super().__init__(retry=retry, name=name)
+        super().__init__(adjustment=adjustment, name=name)
         self.max_credits = max_credits
         self.interval = interval
         self.timestamped_credits: List[Tuple[float, int]] = []
@@ -82,7 +82,7 @@ class CreditRateLimiter(AbstractRateLimiter):
             if self.credit_sum() < self.max_credits:
                 break
 
-            await asyncio.sleep(self.retry)
+            await asyncio.sleep(self.adjustment)
 
         current_credits = self.credit_sum()
         self.timestamped_credits.append((time.perf_counter(), self.request_credits))
@@ -98,49 +98,38 @@ class CreditRateLimiter(AbstractRateLimiter):
 
 
 class CountRateLimiter(AbstractRateLimiter):
-    def __init__(self, max_count: int, interval: float, retry: float = 0.1, name: Optional[str] = None) -> None:
+    def __init__(self, max_count: int, interval: float, adjustment: float = 0., name: Optional[str] = None) -> None:
         """
         Configure a rate limit of max_count requests per interval seconds.
         :param max_count: number of allowed requests per interval
         :param interval: duration in seconds on which is defined the rate limit.
-        :param retry: check rate limit every "retry" seconds once max_count is reached
+        :param adjustment: optimisation parameter
         :param name: an optional name to easily identify the instance
         """
-        super().__init__(retry=retry, name=name)
+        super().__init__(adjustment=adjustment, name=name)
         self.max_count = max_count
         self.interval = interval
-        self.timestamps: List[float] = []
+        self.semaphore = asyncio.Semaphore(self.max_count)
+        self.delay = self.interval - adjustment
 
     async def __aenter__(self) -> "CountRateLimiter":
-        while True:
-            now = time.perf_counter()
-            while self.timestamps:
-                if now - self.timestamps[0] > self.interval:
-                    self.timestamps.pop(0)
-                    if len(self.timestamps) == self.max_count - 1:
-                        logging.debug(
-                            f"Rate Limiter {self.name} is back under its limit of "
-                            f"{self.max_count} requests per {self.interval} s"
-                        )
-                else:
-                    break
-
-            if len(self.timestamps) < self.max_count:
-                break
-
-            await asyncio.sleep(self.retry)
-
-        if len(self.timestamps) == self.max_count - 1:
-            logging.debug(
-                f"Rate Limiter {self.name} has reached its limit of "
-                f"{self.max_count} requests per {self.interval} s"
+        await self.semaphore.acquire()
+        if self.semaphore.locked():
+            logger.debug(
+                f"Rate Limiter {self.name} has reached its limit of {self.max_count} calls per {self.interval} s"
             )
-        self.timestamps.append(time.perf_counter())
-
         return self
 
     async def __aexit__(self, exception_type: Any, exception_val: Any, exception_traceback: Any) -> None:
-        pass
+        loop = asyncio.get_running_loop()
+        loop.call_later(self.delay, self.release_semaphore)
+
+    def release_semaphore(self) -> None:
+        if self.semaphore.locked():
+            logger.debug(
+                f"Rate Limiter {self.name} is back under its limit of {self.max_count} calls per {self.interval} s"
+            )
+        self.semaphore.release()
 
 
 class DecoratedSignature(Protocol):
@@ -157,7 +146,7 @@ def credit_rate_limit(rate_limiter: CreditRateLimiter, request_credits: int) -> 
     return decorator
 
 
-def rate_limit(rate_limiter: CountRateLimiter) -> Any:
+def count_rate_limit(rate_limiter: CountRateLimiter) -> Any:
     def decorator(func: DecoratedSignature) -> Any:
         @wraps(func)
         async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -188,7 +177,7 @@ def rate_limit_with_attribute(attribute_name: str) -> Any:
             rate_limiter = getattr(self_, attribute_name)
             if not isinstance(rate_limiter, CountRateLimiter):
                 raise ValueError(f"rate_limiter must be of type CountRateLimiter. Got {type(rate_limiter)}")
-            return rate_limit(rate_limiter)(func)(self_, *args, **kwargs)
+            return count_rate_limit(rate_limiter)(func)(self_, *args, **kwargs)
         return wrapper
     return decorator
 
@@ -201,9 +190,9 @@ def throughput(
     """
     Async decorator specifying the Rate Limiter to use, and the credits if any, for any async function or method.
     :param rate_limiter: an instance of CreditRateLimiter or CountRateLimiter
-    :param attribute_name:
-    :param request_credits:
-    :return:
+    :param attribute_name: for when the rate limiter is an object attribute
+    :param request_credits: the request cost in credits
+    :return: the decorated function returned value
     """
     if isinstance(rate_limiter, CreditRateLimiter):
         if request_credits and attribute_name is None:
@@ -219,7 +208,7 @@ def throughput(
                 "Wrong parameter(s): when using CountRateLimiter, 'request_credits' and 'attribute_name' must be None"
             )
         else:
-            return rate_limit(rate_limiter)
+            return count_rate_limit(rate_limiter)
     elif rate_limiter is None and attribute_name is not None:
         if request_credits is None:
             return rate_limit_with_attribute(attribute_name)
