@@ -6,20 +6,14 @@ in addition to those just counting the number of requests per time unit
 * License: MIT.
 * Doc: https://github.com/Elnaril/credit-rate-limit
 """
-from abc import (
-    ABC,
-    abstractmethod,
-)
 import asyncio
+from dataclasses import dataclass
 from functools import wraps
 import logging
-import time
 from typing import (
     Any,
-    List,
     Optional,
     Protocol,
-    Tuple,
     Union,
 )
 from uuid import uuid4
@@ -28,76 +22,68 @@ from uuid import uuid4
 logger = logging.getLogger(__name__)
 
 
-class AbstractRateLimiter(ABC):
-    def __init__(self, adjustment: float = 0.1, name: Optional[str] = None) -> None:
-        self.adjustment = adjustment
-        self.name = uuid4() if name is None else name
+@dataclass
+class CreditState:
+    name: str
+    available: int
+    max: int
+    interval: float
+    delay: float
 
-    @abstractmethod
-    async def __aenter__(self) -> "AbstractRateLimiter":
-        ...
 
-    @abstractmethod
+class CreditContextManager:
+    def __init__(self, request_credits: int, credit_state: CreditState) -> None:
+        self.request_credits = request_credits
+        self.credit_state = credit_state
+
+    async def __aenter__(self) -> "CreditContextManager":
+        while True:
+            if self.credit_state.available >= self.request_credits:
+                self.credit_state.available -= self.request_credits
+                if self.credit_state.available <= 0.1 * self.credit_state.max:
+                    logger.debug(
+                        f"Credit Rate Limiter {self.credit_state.name} is using more than 90% of its "
+                        f"{self.credit_state.max} credits per {self.credit_state.interval} s"
+                    )
+                break
+            await asyncio.sleep(0.1)
+        return self
+
     async def __aexit__(self, exception_type: Any, exception_val: Any, exception_traceback: Any) -> None:
-        ...
+        loop = asyncio.get_running_loop()
+        loop.call_later(self.credit_state.delay, self.release_credits)
+
+    def release_credits(self) -> None:
+        self.credit_state.available += self.request_credits
+        if self.credit_state.available == self.credit_state.max:
+            logger.debug(
+                f"Credit Rate Limiter {self.credit_state.name} is back under its limit of "
+                f"{self.credit_state.max} credits per {self.credit_state.interval} s"
+            )
 
 
-class CreditRateLimiter(AbstractRateLimiter):
-    def __init__(self, max_credits: int, interval: float, adjustment: float = 0.1, name: Optional[str] = None) -> None:
+class CreditRateLimiter:
+    def __init__(self, max_credits: int, interval: float, adjustment: float = 0., name: Optional[str] = None) -> None:
         """
         Configure a rate limit of max_credit per interval seconds (for API using credits, CUPS, request units, ...)
         :param max_credits: number of allowed credits per interval
         :param interval: duration in seconds on which is defined the rate limit.
-        :param retry: check rate limit every "retry" seconds once max_credits is reached
+        :param adjustment: optimisation parameter
         :param name: an optional name to easily identify the instance
         """
-        super().__init__(adjustment=adjustment, name=name)
-        self.max_credits = max_credits
-        self.interval = interval
-        self.timestamped_credits: List[Tuple[float, int]] = []
-        self.request_credits: int = -1
+        self.credit_state = CreditState(
+            name=str(uuid4()) if name is None else name,
+            available=max_credits,
+            max=max_credits,
+            interval=interval,
+            delay=max(0.0, interval - adjustment)
+        )
 
-    def credit_sum(self) -> int:
-        return sum(map(lambda t: t[1], self.timestamped_credits))
-
-    def __call__(self, request_credits: int) -> "CreditRateLimiter":
-        self.request_credits = request_credits
-        return self
-
-    async def __aenter__(self) -> "CreditRateLimiter":
-        while True:
-            now = time.perf_counter()
-            while self.timestamped_credits:
-                if now - self.timestamped_credits[0][0] > self.interval:
-                    current_credits = self.credit_sum()
-                    self.timestamped_credits.pop(0)
-                    if current_credits >= self.max_credits > self.credit_sum():
-                        logging.debug(
-                            f"Credit Rate Limiter {self.name} is back under its limit of "
-                            f"{self.max_credits} credits per {self.interval} s"
-                        )
-                else:
-                    break
-
-            if self.credit_sum() < self.max_credits:
-                break
-
-            await asyncio.sleep(self.adjustment)
-
-        current_credits = self.credit_sum()
-        self.timestamped_credits.append((time.perf_counter(), self.request_credits))
-        if current_credits < self.max_credits <= self.credit_sum():
-            logging.debug(
-                f"Credit Rate Limiter {self.name} has reached its limit of"
-                f" {self.max_credits} credits per {self.interval} s"
-            )
-        return self
-
-    async def __aexit__(self, exception_type: Any, exception_val: Any, exception_traceback: Any) -> None:
-        self.request_credits = -1
+    def __call__(self, request_credits: int) -> CreditContextManager:
+        return CreditContextManager(request_credits, self.credit_state)
 
 
-class CountRateLimiter(AbstractRateLimiter):
+class CountRateLimiter:
     def __init__(self, max_count: int, interval: float, adjustment: float = 0., name: Optional[str] = None) -> None:
         """
         Configure a rate limit of max_count requests per interval seconds.
@@ -106,11 +92,11 @@ class CountRateLimiter(AbstractRateLimiter):
         :param adjustment: optimisation parameter
         :param name: an optional name to easily identify the instance
         """
-        super().__init__(adjustment=adjustment, name=name)
+        self.name = uuid4() if name is None else name
         self.max_count = max_count
         self.interval = interval
         self.semaphore = asyncio.Semaphore(self.max_count)
-        self.delay = self.interval - adjustment
+        self.delay = max(0.0, self.interval - adjustment)
 
     async def __aenter__(self) -> "CountRateLimiter":
         await self.semaphore.acquire()
