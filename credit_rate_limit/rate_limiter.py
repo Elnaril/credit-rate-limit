@@ -156,7 +156,7 @@ def credit_rate_limit_with_attribute(attribute_name: str, request_credits: int) 
     return decorator
 
 
-def rate_limit_with_attribute(attribute_name: str) -> Any:
+def count_rate_limit_with_attribute(attribute_name: str) -> Any:
     def decorator(func: DecoratedSignature) -> Any:
         @wraps(func)
         def wrapper(self_: CountRateLimiter, *args: Any, **kwargs: Any) -> Any:
@@ -181,7 +181,7 @@ def throughput(
     :return: the decorated function returned value
     """
     if isinstance(rate_limiter, CreditRateLimiter):
-        if request_credits and attribute_name is None:
+        if request_credits is not None and attribute_name is None:
             return credit_rate_limit(rate_limiter, request_credits)
         else:
             raise ValueError(
@@ -197,7 +197,7 @@ def throughput(
             return count_rate_limit(rate_limiter)
     elif rate_limiter is None and attribute_name is not None:
         if request_credits is None:
-            return rate_limit_with_attribute(attribute_name)
+            return count_rate_limit_with_attribute(attribute_name)
         else:
             return credit_rate_limit_with_attribute(attribute_name, request_credits)
     else:
