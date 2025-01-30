@@ -9,3 +9,6 @@ tox
 
 build
 twine
+
+aiohttp
+web3
